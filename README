@@ -1,0 +1,13 @@
+REAL ESTATE code repository
+
+Jan 2012 – Jun 2015
+Location: Gainesville, Florida Area
+
+Designed and developed several Rmd scripts (workbook format for R) to analyze 
+and diagnose the Real Estate market of Alachua County. Data was captured 
+from several web-sites, one of which was scraped (legally) and cleaned 
+using R. Developed targeted mailing lists of most likely to buy or sell
+where the primary variables turned out to be exponential distribution 
+of time-to-last-sale and other dependent variables. Increased response 
+rate from 0.2% to 1.2% (based on approximately 5,000 mailings distributed 
+over control (1,000) and targeted groups (4,000).
