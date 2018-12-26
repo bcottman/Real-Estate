@@ -1,0 +1,146 @@
+---
+title: "ShownNHHDSales"
+output: html_document
+---
+
+```{r,echo = FALSE}
+# XML
+#install.packages("XML")
+invisible(require(XML))
+#
+require(XLConnect)
+#install.packages("xlsx")
+require(xlsx)
+require(stringr)
+#install.packages("dplyr")
+require(dplyr)
+require(ggplot2)
+
+
+# SET TO URL or "Google Chrome"
+#options(browser="/usr/bin/open -a 'Safari'")
+# CREATE FILE FOM WEB PAGE
+#browseURL("http://www.acpafl.org/salessearch.asp")
+
+#
+# READ IN neihborhood files 
+# SET WD
+setwd("~/Dropbox/Public/Real.Estate/code")
+nh_data = read.xlsx("neighborhoods.xlsx",sheetIndex=1,stringsAsFactors = F)
+
+#c(ii)
+#for(ii in c(ii) ){
+#seqi = as.numeric(seq(1,nrow(nh_data)))
+seqi = as.numeric(seq(1,67))
+ii=seqi[1]
+
+for(ii in seqi){
+  # SET WD
+  setwd("~/Documents/Real.Estate/input/nhhd.taxes")
+  nhb = read.csv(nh_data$File[ii],stringsAsFactors = F)
+  nhb$SaleDate = as.Date(nhb$SaleDate, "%m/%d/%y")
+  # sales from 2005 on
+  nhb = subset(nhb,nhb$SaleDate > as.Date("2004-12-31"))
+  # eliminate all salesprice BELOW 40000
+  nhb = subset(nhb,nhb$SalePrice > 80000)
+  # elinate all props with 0 HtdSqFt
+    nhb = subset(nhb,nhb$HtdSqFt > 0)
+  # magnolia park invest salesprice?
+  nhb = subset(nhb,nhb$SalePrice != 12650000)
+  # elimnate low end tail 
+#  nhb = subset(nhb,nhb$BldgVal > 0)
+#  nhb = subset(nhb,nhb$BldgVal > (mean(nhb$BldgVal) - 2*sd(nhb$BldgVal)))
+  # 
+    if(nrow(nhb) == 0){
+      cat("Neighborhood: ",nh_data$Neighborhood[ii]," 0 Yearly Sales\n")
+    }
+  if(nrow(nhb) > 0){
+    # on 1st iteration create totals data frame
+    if(ii == seqi[1]){
+       TotalSales = data.frame(nhb$SaleDate,nhb$SalePrice,nhb$BldgVal,nhb$HtdSqFt)
+       }
+      # on other iterations add to total df
+    if(ii != seqi[1]){
+       TotalSalesTmp = data.frame(nhb$SaleDate,nhb$SalePrice,nhb$BldgVal,nhb$HtdSqFt)
+      TotalSales = rbind(TotalSales,TotalSalesTmp)
+      }      
+    cat("Neighborhood",nh_data$Neighborhood[ii],nrow(nhb)," Yearly Sales\n")
+    p = ggplot(nhb,aes(x=as.Date(SaleDate))) 
+    # yearly
+    print(p +  geom_histogram(binwidth = 365,aes(fill = ..count..)) +  
+            scale_fill_gradient("Count", low = "green", high = "red"))
+    #quarterly
+    cat(nh_data$Neighborhood[ii],"Quarterly Sales\n")
+    print(p +  geom_histogram(binwidth = (365/4),aes(fill = ..count..)) +  
+            scale_fill_gradient("Count", low = "green", high = "red"))
+    # Scatterplot with confidence interval around the regression line
+    cat(nh_data$Neighborhood[ii],"SalesPrice by HtdSqFt\n")
+    print(ggplot(nhb, aes(x = HtdSqFt, y = SalePrice)) +
+            geom_smooth(method = "lm") + geom_point() +
+            scale_x_continuous(expand = c(0, 0)) + 
+            scale_y_continuous(expand = c(0, 0)))
+    lf0 = lm(SalePrice ~ 0 + HtdSqFt, data = nhb)
+    print(summary(lf0))
+    # Scatterplot with confidence interval around the regression line
+    cat(nh_data$Neighborhood[ii],"Taxable Building value by HtdSqFt\n")
+    print(ggplot(nhb, aes(x = HtdSqFt, y = BldgVal)) +
+            geom_smooth(method = "lm") + geom_point()+
+            scale_x_continuous(expand = c(0, 0)) + 
+            scale_y_continuous(expand = c(0, 0)))
+    lf0 = lm(BldgVal ~ 0 + HtdSqFt, data = nhb)
+    print(summary(lf0))
+    
+#     # set total value of prop
+    nhb$Value = nhb$AgLandVal + nhb$AgLandVal + nhb$MrktLandVal + 
+       nhb$BldgVal + nhb$MiscVal
+#     # sort descending by value
+#     nhb = nhb[order(-nhb$Value),] 
+#     
+#     # Scatterplot with confidence interval around the regression line
+#     cat(nh_data$Neighborhood[ii],"Taxable Total value by HtdSqFt\n")
+#     print(ggplot(nhb, aes(x = HtdSqFt, y = Value)) + 
+#             geom_smooth(method = "lm") + geom_point() )
+#     lf0 = lm(Value ~ HtdSqFt, data = nhb)
+#     print(summary(lf0))
+    # sales price/ tax appraisal vaule
+    cat(nh_data$Neighborhood[ii],"Taxablevalue SalePrice ratio  by HtdSqFt\n")
+    print(ggplot(nhb, aes(x = Value, y = (SalePrice/Value))) + 
+            geom_smooth(method = "lm") + geom_point() )
+    }
+  }
+# total sales
+
+colnames(TotalSales) = c("SaleDate","SalePrice","BldgVal","HtdSqFt")
+cat("Total Yearly Sales:",nrow(TotalSales),"\n")
+p = ggplot(TotalSales,aes(x=SaleDate))
+    # yearly
+print(p +  geom_histogram(binwidth = 365,aes(fill = ..count..)) +  
+            scale_fill_gradient("Count", low = "green", high = "red"))
+    #quarterly
+cat("Total Quarterly Sales:",nrow(TotalSales),"\n")
+print(p +  geom_histogram(binwidth = (365/4),aes(fill = ..count..)) +  
+            scale_fill_gradient("Count", low = "green", high = "red"))
+# histogram SalesPrice
+p = ggplot(TotalSales,aes(x=SalePrice))
+print(p +  geom_histogram(binwidth = 25000 ,aes(fill = ..count..)) +  
+            scale_fill_gradient("Count", low = "green", high = "red") +
+      coord_cartesian(xlim=c(0,1000000)) )
+    # Scatterplot with confidence interval around the regression line
+cat("All neighhoods SalesPrice by HtdSqFt\n")
+p =ggplot(TotalSales, aes(x = HtdSqFt, y = SalePrice))
+  print(p + geom_smooth(method = "lm") + geom_point() +
+            coord_cartesian(ylim=c(0,1000000)) )
+lf0 = lm(SalePrice ~ HtdSqFt, data = TotalSales)
+print(summary(lf0))
+    # Scatterplot with confidence interval around the regression line
+cat("All neighhoods Taxable Building value by HtdSqFt\n")
+print(ggplot(TotalSales, aes(x = HtdSqFt, y = BldgVal)) +
+            geom_smooth(method = "lm") + geom_point()  +
+      coord_cartesian(ylim=c(0,100000)) )
+lf0 = lm(BldgVal ~ HtdSqFt, data = TotalSales)
+print(summary(lf0))
+table(cut(TotalSales$SalePrice,breaks=seq(0, 1000000, by=25000)))
+```
+
+
+

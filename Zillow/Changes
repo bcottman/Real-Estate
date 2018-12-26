@@ -1,0 +1,6 @@
+Version 0.1-1
+
+   *  Functions that communicate with the Zillow server look for the ZillowId string
+      as an R option, if not specified.
+
+   *  Handle case where a comp. has empty longitude and latitude.

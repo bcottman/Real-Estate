@@ -1,0 +1,270 @@
+---
+title: "exploreOwnedBys"
+author: "Bruce Cottman"
+date: "January 24, 2015"
+output: html_document
+---
+
+
+
+
+###This report explores the Gainesville OwnedBy mailing list and various diagnostic graphs.
+
+```{r, echo=FALSE}
+### Analyze Last Sale For a given Listing
+### 1/24/2015
+### Bruce Cottman
+###
+###
+rm(list = ls(all = TRUE)) #CLEAR WORKSPACE
+fln = paste0("Latino-OwnInv.MAILING.07022015",".xls") # MAILING FILE TO INVESTIGATE
+OWNERSHIP = c("Owner","Invester","Renter")
+Ownedby = OWNERSHIP[1]
+#
+invisible(require(XLConnect))
+#install.packages("xlsx")
+invisible(require(xlsx))
+invisible(require(stringr))
+#install.packages("plyr")
+invisible(require(plyr))
+invisible(require(ggplot2))
+#install.packages("lubridate")
+invisible(require(lubridate))
+#install.packages("bitops")
+#invisible(require(bitops))
+#invisible(require(RCurl))
+#install.packages("scales")
+#invisible(require(scales))
+#install.packages("ggthemes")
+#invisible(library(ggthemes))
+
+#
+### graphs theme functions
+#theme
+theme_slanted_axis = function(){
+  theme(plot.title=element_text(size=12,face="bold", vjust=2)) +
+    theme(axis.text.x = element_text(angle = 50, vjust=1.0, hjust = 1,face="bold",colour = "black")) +
+    theme(axis.text.y = element_text(face="bold",colour = "black")) + 
+    theme(axis.text=element_text(size=10),axis.title=element_text(size=10,face="bold")) +
+    theme(panel.grid.major = element_line(colour = 'black', linetype = 'dashed'), 
+             panel.grid.minor = element_line(colour = 'black', linetype = 'dashed'))
+}
+# read in mailing list
+setwd("~/Dropbox/realestate.output/sales/")
+OwnedBys=readWorksheetFromFile(file = fln, sheet = Ownedby)
+print(getwd())
+cat("Read ",Ownedby, " mailing list to OwnedBys dataframe of: ",nrow(OwnedBys)," Records \n")
+```
+###The Top neighborhoods  by Use. i.e. Single Family, etc. and the ave sale price amount
+```{r, echo=FALSE}
+#
+
+### USE top Neighborhood#
+nb = 20  # top count, now top 20
+Use = unique(OwnedBys$PUse)
+Start = 1 # 1= single family
+End = length(Use)
+#End = 3
+seqi = as.numeric(seq(Start,End))
+#
+jj = 4
+
+for(jj in seqi){
+  ResidentType = OwnedBys[OwnedBys$PUse == Use[jj],]
+  leadingNeighborhoods = head(sort(table(ResidentType$Neighborhood),decreasing=TRUE),nb)
+
+  per = round(sum(leadingNeighborhoods)/nrow(ResidentType)*100,0)
+  cat(Use[jj]," Total Top 20 Neighborhoods Count: ",sum(leadingNeighborhoods))
+  nn = names(leadingNeighborhoods)
+  bw = 1
+  ml = paste0(Use[jj]," Neighborhoods")
+  ResidentTypeAll = ResidentType
+  ResidentType = ResidentType[ResidentType$Neighborhood %in% nn,]
+  ## set the levels in order we want
+  ResidentType = within(ResidentType, {Neighborhood = factor(ResidentType$Neighborhood, 
+                                                             levels=names(sort(table(ResidentType$Neighborhood),
+                                                                               decreasing=TRUE)))})
+  #dev.off()
+  cat("Top ",nb," ",Use[jj]," Neighborhoods \n")
+  cat("% of ", Use[jj]," ",per,"% \n")
+  x = sort(table(ResidentType$Neighborhood),decreasing=TRUE)  
+  print(round(x/nrow(ResidentType)*100,1))
+  x = sort(table(ResidentTypeAll$Neighborhood),decreasing=TRUE)  
+  print(x)
+  ##png(filename="Listingbyzip.png", width=11*resol, height=8*resol,res=resol)
+  p = ggplot(ResidentType,aes(x=Neighborhood)) 
+  #p +  geom_histogram(binwidth = bw,aes(fill = ..count..)) +  
+  print(p +  geom_bar(binwidth = bw,aes(fill = ..count..)) +  
+          labs(title = ml,x="Neighborhoods") +
+          #  scale_fill_gradient(yl, low = "red", high = "green") +
+          stat_bin(binwidth=bw, geom="text",size=3, aes(label=..count..), vjust=-.5) +
+          #  scale_y_continuous(limits = c(20, maxi)) +
+          theme_slanted_axis()) 
+  #dev.off()
+  # sales date box plot
+    ##png(filename="Listingbyzip.png", width=11*resol, height=8*resol,res=resol)
+  p = ggplot(ResidentType,aes(x=Neighborhood,y=SaleDateDiff)) 
+   print(p +  geom_boxplot(colour="blue",notch = TRUE,
+                           outlier.colour = "red", outlier.size = 1) +
+#           coord_fixed(ratio = .035) +
+          labs(title = ml,x="Neighborhoods",y="SaleDate Difference (months)") +
+          theme_slanted_axis()) 
+  cat("same graph, zoom in on y axis.\n")
+  a = mean(ResidentType$SaleDateDiff)
+  sig = sd(ResidentType$SaleDateDiff)
+  p = ggplot(ResidentType,aes(x=Neighborhood,y=SaleDateDiff)) 
+   print(p +  geom_boxplot(colour="blue",notch = TRUE,
+                           outlier.colour = "red", outlier.size = 1) +
+#           coord_fixed(ratio = .035) +
+          labs(title = ml,x="Neighborhoods",y="SaleDate Difference (months)") +
+          geom_jitter(position = position_jitter(height = .0001), alpha=0.5,
+                      size=2, colour= "green") +
+          scale_y_continuous(limits = c(0,a+.25*sig)) +
+          theme_slanted_axis()) 
+
+
+  #dev.off()
+  ### determine average tax amount per neighborhood
+  df = aggregate( SalePrice ~ Neighborhood, ResidentType, mean )
+  names(df) = c("Neighborhood","AveSalePrice")
+  # tranform into units of thosands
+  df$AveSalePrice = round(df$AveSalePrice/1000,1)
+  df = df[order(df$AveSalePrice, decreasing = TRUE),]
+  print(df)
+  #png(filename="ListingPastSalesPriceByYear.png", width=8*resol, height=8*resol,res=resol)
+  p = ggplot(df, aes(x = Neighborhood, y = AveSalePrice))
+  print(p + geom_bar(fill= "darkblue",stat="identity") + 
+#                    stat_bin(binwidth=bw, geom="text",size=3, aes(label=AveSalePrice), vjust=-.5) +
+                    labs(title = "average SalePrice per neighborhood",x="neighborhood",y="Average SalePrice(,000)") +
+                    theme_slanted_axis())
+  
+  }# end for loop over use
+```
+
+
+### Top Average Salesprice by Use. i.e. Single Family, etc. and the average Sale Price
+
+```{r, echo=FALSE}
+#
+Use = unique(OwnedBys$PUse)
+Start =1
+End = length(Use)
+#End = 1
+jj=2
+seqi = as.numeric(seq(Start,End))
+for(jj in seqi){
+  ResidentType = OwnedBys[OwnedBys$PUse == Use[jj],]
+  # create sale price catergories
+  cati = seq(101,500101,50000)
+  ResidentType$SalePriceCategory = cut(ResidentType$SalePrice,cati)
+  t=table(ResidentType$SalePriceCategory)
+  cat("Total of Number of Records for ",Use[jj]," with Sales Price gt $100: ", 
+      sum(t),"out of: ", length(ResidentType$PUse == Use[jj])," \n")
+  cat("% of Sales Price Catergories gt $100: ",
+      round(sum(t)/length(ResidentType$PUse == Use[jj])*100,1)," \n")
+  pt = round(prop.table(t)*100,1)
+  print(pt)
+# set uo variables for plot
+  bw = 1
+  ml = paste0(Use[jj]," Neighborhoods")
+  ##png(filename="Listingbyzip.png", width=11*resol, height=8*resol,res=resol)
+  p = ggplot(ResidentType,aes(x=SalePriceCategory)) 
+  #p +  geom_histogram(binwidth = bw,aes(fill = ..count..)) +  
+  print(p +  geom_bar(binwidth = bw,aes(fill = ..count..)) +  
+          labs(title = ml,x="Sale Price Catergories") +
+          #  scale_fill_gradient(yl, low = "red", high = "green") +
+          stat_bin(binwidth=bw, geom="text",size=3, aes(label=..count..), vjust=-.5) +
+          #  scale_y_continuous(limits = c(20, maxi)) +
+          theme_slanted_axis()) 
+  
+  df = aggregate( SalePrice ~ Neighborhood, ResidentType, mean )
+    names(df) = c("Neighborhood","AveSalePrice")
+
+  # tranform into units of thosands
+  df$AveSalePrice = round(df$AveSalePrice/1000,1)
+
+  df3 = count(ResidentType,c("Neighborhood"))
+  dfm = merge(df,df3,id="Neighborhood")
+  df = dfm[order(df$AveSalePrice, decreasing = TRUE),]
+  print(df)
+  ln = 20
+  df  = head(df,ln)
+  cat("\n")
+  cat("Top ",ln, " ",Use[jj]," Neighborhoods by Sales Price")
+  print(df)
+  
+  #png(filename="ListingPastSalesPriceByYear.png", width=8*resol, height=8*resol,res=resol)
+  print(ggplot() + 
+                    geom_point(data=df, mapping=aes(x = Neighborhood, y = AveSalePrice,
+                               size=df$freq),colour="darkblue") + 
+                    guides(size = guide_legend(title = "Frequency")) +
+#               stat_bin(binwidth=bw, geom="text",size=3, aes(label=AveSalePrice), vjust=-.5) +
+                    labs(title = paste0("average SalePrice per Top ", Use[jj]," neighborhoods"),
+                         x=paste0(Use[jj]," neighborhoods"),y="Average SalePrice(,000)") +
+                    theme_slanted_axis())
+  # sales date box plot
+cat("each green dot represents 1 record.\n")
+  p = ggplot(ResidentType,aes(x=SalePriceCategory,y=SaleDateDiff)) 
+   print(p +  geom_boxplot(colour="blue",notch = TRUE,
+                           outlier.colour = "red", outlier.size = 1) +
+#           coord_fixed(ratio = .035) +
+          labs(title = ml,x="SalePriceCategories",y="SaleDate Difference (months)") +
+  geom_jitter(position = position_jitter(height = .00051), alpha=0.2,
+              size=2, colour= "green") +
+          theme_slanted_axis()) 
+    ##png(filename="Listingbyzip.png", width=11*resol, height=8*resol,res=resol)
+cat("same graph, zoom in on y axis.\n")
+a = mean(ResidentType$SaleDateDiff)
+sig = sd(ResidentType$SaleDateDiff)
+  p = ggplot(ResidentType,aes(x=SalePriceCategory,y=SaleDateDiff)) 
+   print(p +  geom_boxplot(colour="blue",notch = TRUE,
+                           outlier.colour = "red", outlier.size = 1) +
+#           coord_fixed(ratio = .035) +
+          labs(title = ml,x="SalePriceCategories",y="SaleDate Difference (months)") +
+          scale_y_continuous(limits = c(0,a+.25*sig)) +
+          geom_jitter(position = position_jitter(height = .0001), alpha=0.5,
+              size=2, colour= "green") +
+          theme_slanted_axis()) 
+#
+cat("each green dot represents 1 record.\n")
+  p = ggplot(ResidentType,aes(x=HtdSqFt,y=SaleDateDiff)) 
+#   print(p +  geom_boxplot(colour="blue",notch = TRUE,
+#                           outlier.colour = "red", outlier.size = 1) +
+#           coord_fixed(ratio = .035) +
+   print(p +  geom_point(colour="blue") +
+          labs(title = ml,x="Heated (SqFt)",y="SaleDate Difference (months)") +
+#  geom_jitter(position = position_jitter(height = .00051), alpha=0.2,
+#              size=2, colour= "green") +
+          theme_slanted_axis()) 
+ax = mean(ResidentType$HtdSqFt)
+sigx = sd(ResidentType$HtdSqFt)
+ay = mean(ResidentType$SaleDateDiff)
+sigy = sd(ResidentType$SaleDateDiff)
+  p = ggplot(ResidentType,aes(x=HtdSqFt,y=SaleDateDiff)) 
+#   print(p +  geom_boxplot(colour="blue",notch = TRUE,
+#                           outlier.colour = "red", outlier.size = 1) +
+#           coord_fixed(ratio = .035) +
+   print(p +  geom_point(colour="blue") +
+          labs(title = ml,x="Heated (SqFt)",y="SaleDate Difference (months)") +
+                     scale_x_continuous(limits = c(ax-2.*sigx,ax+1.*sigx)) +
+                     scale_y_continuous(limits = c(0,ay+1.*sigy)) +
+#  geom_jitter(position = position_jitter(height = .00051), alpha=0.2,
+#              size=2, colour= "green") +
+          theme_slanted_axis()) 
+#
+
+  p = ggplot(ResidentType,aes(y=HtdSqFt,x=SalePriceCategory)) 
+  print(p +  geom_boxplot(colour="blue",notch = TRUE,
+                           outlier.colour = "red", outlier.size = 1) +
+            geom_jitter(position = position_jitter(height = .00051), alpha=0.2,
+              size=2, colour= "green") +
+          labs(title = ml,y="Heated (SqFt)",x="Sale Price ategory") +
+#  geom_jitter(position = position_jitter(height = .00051), alpha=0.2,
+#              size=2, colour= "green") +
+          theme_slanted_axis()) 
+  #dev.off()
+  }# end for loop over saleprice
+```
+
+
+

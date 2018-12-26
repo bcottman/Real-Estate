@@ -1,0 +1,369 @@
+---
+title: "CreateMailingList"
+author: "Bruce Cottman"
+date: "January 14, 2015"
+output: html_document
+---
+
+This report creates the Latino mailing list and various diagnostic graphs.
+
+```{r, echo=FALSE}
+### Analyze Last Sale For a given Listing
+### 12/15/2014
+### Bruce Cottman
+###
+###
+rm(list = ls(all = TRUE)) #CLEAR WORKSPACE
+#
+invisible(require(XLConnect))
+#install.packages("xlsx")
+invisible(require(xlsx))
+invisible(require(stringr))
+#install.packages("dplyr")
+#invisible(require(dplyr))
+invisible(require(ggplot2))
+#install.packages("lubridate")
+invisible(require(lubridate))
+#install.packages("bitops")
+#invisible(require(bitops))
+#invisible(require(RCurl))
+#install.packages("scales")
+#invisible(require(scales))
+#install.packages("ggthemes")
+#invisible(library(ggthemes))
+
+#
+### graphs theme functions
+#theme
+theme_slanted_axis = function(){
+  theme(plot.title=element_text(size=12,face="bold", vjust=2)) +
+    theme(axis.text.x = element_text(angle = 50, vjust=1.0, hjust = 1,face="bold",colour = "black")) +
+    theme(axis.text.y = element_text(face="bold",colour = "black")) + 
+    theme(axis.text=element_text(size=10),axis.title=element_text(size=10,face="bold"))
+}
+# DB are usually binary and internal use
+readDB <- function(wd,fname){
+  setwd(wd)
+  cat("Loading database file: ",fname,"\n")
+  readRDS(fname)
+}
+
+ACPARecords = readDB("~/Documents/Real.Estate/input/DB/","DB.APCA.11012015.rds")
+ACPARecords = ACPARecords[ACPARecords$paddr != "" ,]
+ACPARecords = unique(ACPARecords)
+#table(ACPARecords$PUse)
+# focus on homes, filter out land, vacancies, etc.
+pull = c("SINGLE FAMILY",
+        "MULTIFAMILY",
+        "MISC. RESIDENCE",
+        "MOBILE HOME",
+        "CONDOMINIUM"
+)
+ACPARecords = unique(subset(ACPARecords,ACPARecords$PUse %in% pull ))
+cat("Loaded ACPA Records:",nrow(ACPARecords),"\n")
+
+# 
+
+LatinoNames = readDB("~/Documents/Real.Estate/input/DB/","DB.LatinoNames.21092014.rds")
+cat("Loaded LATINO last names DB:",nrow(LatinoNames),"\n")
+# Latinos in ACPARecords
+LatinoInACPARecords = ACPARecords[(ACPARecords$LastName %in% LatinoNames$LastName),]
+
+# Listings of CITIES OF alachua county
+readListingDB <- function(wdf,fname,wdl){
+  setwd(wdf)
+  CityList = read.xlsx(fname,sheetIndex=1,stringsAsFactors = F)
+  CityList = CityList[complete.cases(CityList),]
+  # Read in  listings
+  Start =1
+  End = nrow(CityList)
+  seqi = as.numeric(seq(Start,End))
+# ii=seqi[Stat]
+  INITFLAG = 0
+  for(ii in seqi){
+    if(CityList$FILENAME[ii] != "NONE"){
+      setwd(wdl)
+      prop=readRDS(CityList$FILENAME[ii])
+      # INITIALZE
+      if(INITFLAG == 0){
+        TCityListings = subset(prop,prop$street %in% "0xxxxxyyyzzz")
+        INITFLAG = 1
+      }
+      cat("Number of Listing Records:",nrow(prop)," for City: ",CityList$CITY[ii],"\n")
+      # add to total
+      TCityListings = rbind(TCityListings,prop)
+    } # END IF
+  } #END FOR LOOP
+  cat("Total Number of Listing Records:",nrow(TCityListings),"\n")
+  TCityListings = unique(TCityListings)
+  cat("Total Number of UNIQUE Listing Records:",nrow(TCityListings),"\n")
+  TCityListings
+}
+
+TCityListings = readListingDB("~/Dropbox/Public/Real.Estate/code","AlachuaCountyCityListingsList.xlsx","~/Documents/Real.Estate/input/DB/")
+cat("Loaded Listings DB:",nrow(TCityListings),"\n")
+# no land
+TCityListings = unique(subset(TCityListings,TCityListings$type != "LAND"))
+
+# listing address cleanup
+TCityListings = TCityListings[TCityListings$street != "100 SLIME ST NO STREET ADDRESS" ,]
+cat("Eliminate -100 SLIME ST NO STREET ADDRESS - Records Remaining: ",nrow(TCityListings),"\n")
+TCityListings$street = str_replace(TCityListings$street,"TERRACE","TER")
+TCityListings$street = str_replace(TCityListings$street," LN"," LANE")
+TCityListings$street = str_replace(TCityListings$street," ROAD"," RD")
+TCityListings$street = str_replace(TCityListings$street," PLACE"," PL")
+TCityListings$street = str_replace(TCityListings$street," BOULEVARD"," BLVD")
+TCityListings$street = str_replace(TCityListings$street," # A-"," A")
+TCityListings$street = str_replace(TCityListings$street," # B-"," B")
+
+TCityListings$street = str_replace(TCityListings$street," # "," APT ")
+TCityListings$street = str_replace(TCityListings$street," AVE AVE"," AVE")
+TCityListings$street = str_replace(TCityListings$street," UNIT "," - UNIT ")
+TCityListings$street = str_replace(TCityListings$street," SW 45","  SW STATE RD 45")
+TCityListings$street = str_replace(TCityListings$street," SW 346","  SW COUNTY RD 346")
+TCityListings = subset(TCityListings,str_detect(TCityListings$street,"[0-9]{1,} [NW,NE,SE,SW]"))
+
+cat("Eliminate - NO STREET ADDRESS number - Records Remaining: ",nrow(TCityListings),"\n")
+
+
+
+
+# eliminate record columns don't/need in mailing or downstram plots
+LatinoInACPARecords = within(LatinoInACPARecords,{FirstName1 = paste0(FirstName1," & ",FirstName2)})
+LatinoInACPARecords$FirstName2 = NULL
+LatinoInACPARecords = within(LatinoInACPARecords,{Addr1 = paste0(Addr1,", ",Addr2)})
+LatinoInACPARecords$Addr2 = NULL
+LatinoInACPARecords$Section = NULL
+LatinoInACPARecords$Township = NULL
+LatinoInACPARecords$Range = NULL
+LatinoInACPARecords$MillageCode = NULL
+LatinoInACPARecords$SqFt = NULL
+LatinoInACPARecords$HtdSqFt = NULL
+LatinoInACPARecords$Acres = NULL
+LatinoInACPARecords$Subdivision = NULL
+LatinoInACPARecords$AgLandVal = NULL
+LatinoInACPARecords$MrktLandVal = NULL
+LatinoInACPARecords$BldgVal = NULL
+LatinoInACPARecords$MiscVal = NULL
+LatinoInACPARecords$SOHDeferAmt = NULL
+LatinoInACPARecords$ExemptAmt = NULL
+#LatinoInACPARecords$TaxAmt = NULL
+LatinoInACPARecords$QualUnqual = NULL
+LatinoInACPARecords$SaleInstrument = NULL
+LatinoInACPARecords$LocAddr = NULL
+#LatinoInACPARecords$VacImp = NULL
+LatinoInACPARecords$Value = NULL
+
+
+## Eliminate Latinos with listings
+# first find Latino owners with listings
+LatinoOwners = LatinoInACPARecords[LatinoInACPARecords$paddr == LatinoInACPARecords$maddr,]
+
+LatinoOwnersInListing = intersect(LatinoOwners$paddr,TCityListings$street)
+LatinoOwnersNotInListing = LatinoOwners[!(LatinoOwners$paddr %in% LatinoOwnersInListing),]
+LatinoOwnersNotInListing$paddr = NULL
+LatinoOwnersNotInListing$maddr = NULL
+cat("Total Number of Owner Adresses Not in Listing Records:",nrow(LatinoOwnersNotInListing),"\n")
+# write out owner mailing list
+setwd("~/Dropbox/realestate.output/sales/")
+fln = paste0("Latino-OwnInv.MAILING.12012015",".xls")
+
+writeWorksheetToFile(file = fln, data = LatinoOwnersNotInListing, sheet = "Owners")
+
+# next find Latino invetors with listings - none!
+LatinoInvestors =subset(LatinoInACPARecords,(LatinoInACPARecords$paddr != LatinoInACPARecords$maddr ))
+LatinoInvestorsNotInListing = LatinoInvestors
+LatinoInvestorsNotInListing$paddr = NULL
+LatinoInvestorsNotInListing$maddr = NULL
+cat("Total Number of Investor Adresses Not in Listing Records:",nrow(LatinoInvestorsNotInListing),"\n")
+
+writeWorksheetToFile(file = fln, data = LatinoInvestorsNotInListing, sheet = "Investors")
+print(getwd())
+cat("Saving Latino mailing list to file: ",fln,"\n")
+### Graphs
+cat("Listing by Usage Type:","\n")
+tann = table(TCityListings$type)
+#tann
+round(prop.table(tann)*100,1)
+#
+cat("Latino Owners not Listing Usage Type:","\n")
+tann = table(LatinoOwnersNotInListing$PUse)
+#tann
+round(prop.table(tann)*100,1)
+cat("Latino Investors not Listing Usage Type:","\n")
+tann = table(LatinoInvestorsNotInListing$PUse)
+#tann
+round(prop.table(tann)*100,1)
+
+
+#
+cat("Latino Owners live in These Cities:","\n")
+tann = sort(table(LatinoOwnersNotInListing$City),decreasing=TRUE)
+bw = 10
+leadingCities = head(tann,n=bw)
+leadingCities
+#
+cat("Latino Investors live in These Cities:","\n")
+tann = sort(table(LatinoInvestorsNotInListing$City),decreasing=TRUE)
+bw = 10
+leadingCities = head(tann,n=bw)
+leadingCities
+
+#
+bw = 1
+yl = "Number in Zip Code"
+
+#png(filename="Listingbyzip.png", width=11*resol, height=8*resol,res=resol)
+p = ggplot(TCityListings,aes(x=zip)) 
+#p +  geom_histogram(binwidth = bw,aes(fill = ..count..)) +  
+  p +  geom_bar(binwidth = bw,aes(fill = ..count..)) +  
+  labs(title = "Listing zips",x="Zip Code",y=yl) +
+#  scale_fill_gradient(yl, low = "red", high = "green") +
+  stat_bin(binwidth=bw, geom="text",size=3, aes(label=..count..), vjust=-.5) +
+#  scale_y_continuous(limits = c(20, maxi)) +
+  theme_slanted_axis() 
+#dev.off()
+resol = 600
+#listings by broker
+setwd("~/Documents/Real.Estate/output/graphs/")
+yl = "Number of Listings"
+bw = 10
+tab = sort(table(TCityListings$broker),decreasing=TRUE)
+leadingBrokers = head(tab,n=bw)
+leadingBrokers
+TopBrokerNames = names(leadingBrokers)
+maxi = max(tab)
+BListings = subset(TCityListings,TCityListings$broker %in% TopBrokerNames )
+
+## set the levels in order we want
+BListings = within(BListings, {broker = factor(BListings$broker, 
+                              levels=names(sort(table(BListings$broker),decreasing=TRUE)))})
+
+cat("Broker Listing since 2004 \n")
+tabb = table(BListings$broker)
+round(prop.table(tabb),2)
+#png(filename="BrokerListings.png", width=11*resol, height=8*resol,res=resol)
+p = ggplot(BListings,aes(x=broker)) 
+#p +  geom_histogram(binwidth = bw,aes(fill = ..count..)) +  
+  p +  geom_bar(binwidth = bw,aes(fill = ..count..)) +  
+  labs(title = "Broker Listings of Archer, Gainesville, Newberry",x="Broker",y=yl) +
+#  scale_fill_gradient(yl, low = "red", high = "green") +
+  stat_bin(binwidth=bw, geom="text",size=3, aes(label=..count..), vjust=-.5) +
+#  scale_y_continuous(limits = c(20, maxi)) +
+  theme_slanted_axis() 
+#dev.off()
+#quarterly Sales since 2010
+SalesOI = subset(ACPARecords,(ACPARecords$SaleDate > as.Date("2000-01-01") & ACPARecords$SaleDate < as.Date("2015-01-01") ))
+
+ setwd("~/Documents/Real.Estate/output/graphs/")
+yl = "Number of Sales"
+bw = 365/4
+cat("Quarterly Sales since 2004 \n")
+#png(filename="SalesByQuarter.png", width=8*resol, height=8*resol,res=resol)
+p = ggplot(SalesOI,aes(x=as.Date(SaleDate))) 
+p +  geom_histogram(binwidth = bw,aes(fill = ..count..)) +  
+      labs(title = "Quarterly Sales Alachua County",x="Quarter of Sale",y=yl) +
+        scale_fill_gradient("Count", low = "red", high = "green") +
+        stat_bin(binwidth=bw, geom="text",size=3, aes(label=..count..), vjust=-.5) +
+        theme_slanted_axis() 
+#dev.off()
+# yearly for years gt 2000
+cat("Yearly Sales\n")
+yl = "Number of Sales"
+bw = 365
+
+#png(filename="SalesByYear.png", width=8*resol, height=8*resol,res=resol)
+p = ggplot(SalesOI,aes(x=as.Date(SaleDate))) 
+p +  geom_histogram(binwidth = bw,aes(fill = ..count..)) +  
+        labs(title = "Yearly Sales Alachua County",x="Year of Sale",y=yl) +
+        scale_fill_gradient("Count", low = "red", high = "green") +
+        stat_bin(binwidth=bw, geom="text",size=3, aes(label=..count..), vjust=-.5) +
+        theme_slanted_axis()
+#dev.off()
+#
+cat("Latino Owners Sales Date Catergories \n")
+tabb = table(LatinoOwnersNotInListing$SaleDateCategoryLabels)
+print(prop.table(tabb))
+cat("Percentage of Latino Records with Sales Date > 2002,",round(sum(LatinoOwnersNotInListing$SaleDate > as.Date("2003-01-01"))
+      / nrow(LatinoOwnersNotInListing),2)*100,"\\%\n")
+#
+#
+
+SalesOI = subset(LatinoOwnersNotInListing,LatinoOwnersNotInListing$SaleDate > as.Date("2000-01-01"))
+Adresses = SalesOI
+cat("Past Sales of Listings\n")
+yl = "Number of Past Sales"
+bw = 365
+
+#png(filename="ListingPastSalesByYear.png", width=8*resol, height=8*resol,res=resol)
+p = ggplot(Adresses,aes(x=as.Date(SaleDate))) 
+p +  geom_histogram(binwidth = bw,aes(fill = ..count..)) +  
+  labs(title = "Yearly Latino Owner Listings Past Sales Alachua County",x="Year of Sale",y=yl) +
+  scale_fill_gradient(yl, low = "red", high = "green") +
+  stat_bin(binwidth=bw, geom="text",size=3, aes(label=..count..), vjust=-.5) +  
+  scale_size_continuous(range = c(3, 8)) +
+  theme_slanted_axis()
+#dev.off()
+cat("Past Sales of  Latino Owner Listings by Quarter\n")
+yl = "Number of Past Sales"
+bw = 365/4
+
+#png(filename="ListingPastSalesByQuarter.png", width=8*resol, height=8*resol,res=resol)
+p = ggplot(Adresses,aes(x=as.Date(SaleDate))) 
+p +  geom_histogram(binwidth = bw,aes(fill = ..count..)) +  
+  labs(title = "Quarterly  Latino Owner Listings Past Sales Alachua County",x="Year of Sale",y=yl) +
+  scale_fill_gradient(yl, low = "red", high = "green") +
+  stat_bin(binwidth=bw, geom="text",size=3, aes(label=..count..), vjust=-.5) +  
+  scale_size_continuous(range = c(3, 8)) +
+  theme_slanted_axis()
+#dev.off()
+
+SalesOI = subset(LatinoOwnersNotInListing,
+                 LatinoOwnersNotInListing$SaleDate > as.Date("1995-01-01"))
+
+yl = " Latino Owner Sales Price"
+bw = 365
+SalePriceLimit = 0
+tabb = table(SalesOI$SalePrice > SalePriceLimit,SalesOI$PUse)
+cat("Sale Price Greater than: ",SalePriceLimit,"\n")
+print(round(prop.table(tabb),2))
+#
+SalePriceLB = subset(SalesOI,(SalesOI$SalePrice > SalePriceLimit))
+#png(filename="ListingPastSalesPriceByYear.png", width=8*resol, height=8*resol,res=resol)
+p = ggplot(SalePriceLB, aes(x = as.Date(SaleDate), y = SalePrice, color = PUse))
+p + geom_point() + 
+  geom_abline(intercept = c(50000), slope =0.0, colour = "red", size = 2) +
+    geom_abline(intercept = c(75000), slope =0.0, colour = "red", size = 1) +
+    geom_abline(intercept = c(100000), slope =0.0, colour = "red", size = 0.5) +
+  scale_size_continuous(range = c(3, 8)) +
+  scale_y_continuous(limits = c(5000, 300000)) +
+  labs(title = "Yearly  Latino Owner Listings Past Sales Alachua County",x="Year of Sale",y=yl) +
+  theme_slanted_axis()
+#dev.off()
+
+bw = 365
+SalesOI= subset(LatinoOwnersNotInListing,( 
+                  LatinoOwnersNotInListing$SaleDate > as.Date("2000-01-01")))
+yl = " Latino Owner Number of Past Sales"
+#png(filename="UseListingPastSalesByYear.png", width=8*resol, height=8*resol,res=resol)
+p = ggplot(SalesOI, aes(x = as.Date(SaleDate),  fill = PUse))
+p + geom_histogram(binwidth = bw) + 
+  stat_bin(binwidth=bw, geom="text",size=3, aes(label=..count..), vjust=-1.5) +  
+  labs(title = "Yearly Latino Owner Listings Past Sales Alachua County",x="Year of Sale",y=yl) +
+  theme_slanted_axis()
+#dev.off()
+bw = 365
+yl = "Number of Past Sales"
+#png(filename="HomeUseListingPastSalesByYear.png", width=8*resol, height=8*resol,res=resol)
+p = ggplot(SalesOI, aes(x = as.Date(SaleDate),  fill = PUse))
+p + geom_bar(position="dodge",binwidth = bw) +
+#p + geom_histogram(binwidth = bw,aes(fill = ..count..)) + 
+#  scale_fill_gradient(yl, low = "clear", high = "white") +
+  stat_bin(binwidth=bw, geom="text",size=3, aes(label=..count..), vjust=-1.5) +  
+#  scale_size_continuous(range = c(3, 8)) +
+  labs(title = "Yearly Latino Owner Listings Past Sales Alachua County",x="Year of Sale",y=yl) +
+  theme_slanted_axis()
+#dev.off()
+```
+
+.

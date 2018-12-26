@@ -1,0 +1,70 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+Various simple statistics for the ACPA database.
+
+```{r,echo = FALSE, message=FALSE}
+
+invisible(require(XLConnect))
+#install.packages("xlsx")
+invisible(require(xlsx))
+invisible(require(stringr))
+#install.packages("dplyr")
+#require(dplyr)
+invisible(require(ggplot2))
+#install.packages("lubridate")
+require(lubridate)
+#install.packages("bitops")
+require(bitops)
+require(RCurl)
+#install.packages("scales")
+require(scales)
+```
+
+```{r, echo=FALSE}
+# DB are usually binary and internal use
+setwd("~/Documents/Real.Estate/input/DB/")
+TodayDate = "28032015"
+fn = paste0("DB.APCA.",TodayDate)
+cat("Loading database file: ",fn,"\n")
+load(fn)
+cat("States: ",unique(CountyAccessorRecords$State),"\n")
+cat("Cities: ",unique(CountyAccessorRecords$City),"\n")
+cat("Zip Codes: ",unique(CountyAccessorRecords$Zip),"\n")
+cat("Property use codes: ",unique(CountyAccessorRecords$PUse),"\n")
+cat("Neighborhoods: ",unique(CountyAccessorRecords$Neighborhood),"\n")
+cat("Subdivision: ",unique(CountyAccessorRecords$Subdivision),"\n")
+#˙eated SF
+    p = ggplot(CountyAccessorRecords,aes(x=HtdSqFt)) 
+    print(p +  geom_histogram(binwidth = 19,aes(fill = ..count..)) + 
+            xlim(100, 5000) +
+            scale_fill_gradient("Count", low = "green", high = "red"))
+# lot size
+    p = ggplot(CountyAccessorRecords,aes(x=Acres)) 
+    print(p +  geom_histogram(binwidth = 19,aes(fill = ..count..)) + 
+            xlim(0.005, 500) + ylim(0, 1000) +
+            scale_fill_gradient("Count", low = "green", high = "red"))
+# Sale by date
+  # sales from 2005 on
+
+    SalesOI = subset(CountyAccessorRecords,CountyAccessorRecords$SaleDate > as.Date("2004-12-31"))
+#   Sales from 101 to 500,000
+    SalesOI =subset(SalesOI,(SalesOI$SalePrice < 500001) & (SalesOI$SalePrice > 101))
+    cat("Sale count 101-500,000: ",nrow(SalesOI),"\n")
+    # yearly
+    cat("Yearly Sales\n")
+    p = ggplot(SalesOI,aes(x=as.Date(SaleDate))) 
+    print(p +  geom_histogram(binwidth = 365,aes(fill = ..count..)) +  
+            scale_fill_gradient("Count", low = "green", high = "red"))
+    #quarterly
+    cat("Quartely Sales\n")
+    print(p +  geom_histogram(binwidth = (365/4),aes(fill = ..count..)) +  
+            scale_fill_gradient("Count", low = "green", high = "red"))
+# Sale Price
+    p = ggplot(SalesOI,aes(x=SalePrice)) 
+    print(p +  geom_histogram(binwidth = 19,aes(fill = ..count..)) + 
+            xlim(101, 500000) + ylim(0, 100) +
+            scale_fill_gradient("Count", low = "green", high = "red"))
+```

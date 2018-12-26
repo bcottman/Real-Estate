@@ -1,0 +1,128 @@
+---
+title: "PriceFromCMA"
+output: html_document
+---
+A CMA is calculated from historical sales for a given time period, PERIOD, for a given neighborhood ,NBH, for a revalent set of variables.  PERIOD is determined from stability of varibles over that PERIOD.  For Florida, the historical sales data comes for tax apprasor's website - http://www.acpafl.org - Achula county.
+
+Market conditions, MC(j), is obtained by predicting the CMA(j) of listed houses in the neighborhood and comparing to listed prices,   PRICE(j). The PRICE of the target property is 
+PRICE(j=T) = CMA(j=T) + MCj=T).
+
+Ideally, PRICE(j)/CMA(j) .vs. time-on-market, TOM, could determine
+PRICE(j=T,TOM)
+iff TOM data can be found.
+
+```{r,echo = FALSE, message=FALSE}
+
+invisible(require(XLConnect))
+#install.packages("xlsx")
+invisible(require(xlsx))
+invisible(require(stringr))
+#install.packages("dplyr")
+#require(dplyr)
+invisible(require(ggplot2))
+#install.packages("lubridate")
+require(lubridate)
+#install.packages("bitops")
+require(bitops)
+require(RCurl)
+#install.packages("scales")
+require(scales)
+```
+
+
+```{r, echo=FALSE}
+
+source("~/Dropbox/Public/Real.Estate/code/Zillow/R/zillow2.R")
+source("~/Dropbox/Public/Real.Estate/code/Zillow/R/zillowErrors.R")
+
+#
+# READ IN neihborhood files 
+# SET WD
+setwd("~/Dropbox/Public/Real.Estate/code")
+nbh_list = read.xlsx("nbhTargetAddress.xlsx",sheetIndex=1,stringsAsFactors = F)
+  #Read in Zillow package
+seqi = as.numeric(seq(1,1))
+ii=seqi[1]
+
+for(ii in seqi){
+  
+  cat("Neighborhood: ",nbh_list$Neighborhood[ii],
+      " TargetAddress:",nbh_list$Address[ii],
+      " TargetZip:", nbh_list$Zip[ii],"\n")
+  # SET WD
+  setwd("~/Documents/Real.Estate/input/nhhd.taxes")
+  nbh = read.csv(nbh_list$File[ii],stringsAsFactors = F)
+  nbh$SaleDate = as.Date(nbh$SaleDate, "%m/%d/%y")
+  sst = "1615 se 4th st"
+  
+  zzip = 32641
+  dfq = lhcompf(sst, zzip)  
+  dfq = lhcompf(nbh_list$Address[ii], nbh_list$Zip[ii])
+  dfq$street = toupper(dfq$street)
+  dfq$street = str_replace(dfq$street," AVE"," AV")
+  #zillow comparables in dfq
+  isa = intersect(dfq$street,nbh$LocAddr)
+  zc = subset(dfq,dfq$street %in% isa,StringAsFactor=F)
+  zc = data.frame(lapply(zc, as.character), stringsAsFactors=FALSE)
+
+  cat("Comparables: ",nrow(zc),"\n")
+  for(ij in as.numeric(seq(1,nrow(zc)))){
+    cat(zc$street[ij],"\n")
+    cat("zestimate value",zc$amount[ij],"\n")
+    cat("recent zestimate cost per foot",zc$cpsf[ij],"\n")
+    cat("last sold: ")
+    print(zc$lastSold[ij])
+    cat("last sold Price: ")
+    print(zc$lastSoldPrice[ij])
+    cat("last sold cost per foot",zc$lcpsf[ij],"\n")
+    cat("\n")
+    }
+  cat("\n")
+  
+  da = here()-days(c(30,60,90,120,150,180,365))
+  nbh180 = subset(nbh,nbh$SaleDate %within% new_interval(da[7],here()))
+  nbh180 = subset(nbh180,nbh180$SalePrice > 100)
+  if(nrow(nbh180) > 0){
+    lf0 = lm(SalePrice ~ 0 + HtdSqFt, data = nbh180)
+    
+    print(ggplot(nbh180, aes(x = HtdSqFt, y = SalePrice)) +
+            geom_point() +
+            geom_abline(intercept = 0, slope = lf0$coefficients[[1]][1]) + 
+            expand_limits(y=0)
+          )
+    print(summary(lf0))
+    CMA = as.numeric(zc$finishedSqFt[1])*lf0$coefficients[[1]][1]
+    cat("Address: ",zc$street[1],zc$zip[1],",Neighborhood Base CMA",CMA,"\n")
+    Speed.Of.Sale = c("S","Fast","Medium","Slow","E")
+    x = c(.93,.95,1,1.05,1.06)
+    CMA.Price = CMA*x
+   
+    z = data.frame(CMA.Price,x)
+    lf0 = lm(CMA.Price ~ 0 + x, data=z)
+    summary(lf0)
+
+    print(ggplot(nbh180, aes(x = x, y = CMA.Price)) +
+            theme_bw() +
+            scale_shape_discrete(solid=T, guide="none") +
+            geom_point( shape=c("","F","","S",""),color=c("blue","green","blue","red","blue"),size=20)  +
+            geom_abline(intercep=0, slope = lf0$coefficients[[1]][1]) + 
+            theme(text = element_text(size=20)) +
+#                        ylim(CMA.Price[1]*.95,CMA.Price[3]*1.05) +
+#                          scale_y_reverse() +
+            scale_y_continuous(labels=dollar) +
+
+#            scale_x_discrete(breaks=c("Fast","Medium","Slow")) +
+            labs(x="Speed of Sale", y="Price Based on Past Sales") +
+            theme(axis.title.y = element_text(family="serif",face="bold",size=20,angle=90,vjust=0.25)) +
+            theme(axis.title.x = element_text(family="serif", face="bold",size=20,angle=00,hjust=0.54, vjust=0)) +
+
+            theme( axis.text.x = element_blank()) 
+#            xlim(x[1],x[2]*1.05) 
+
+          )
+  } #end if
+}  #end for
+
+```
+
+CMA.Price[3]

@@ -1,0 +1,226 @@
+---
+title: "CreateAlachaDB"
+author: "Bruce Cottman"
+date: "July 6, 2015"
+output: html_document
+---
+
+#Read in ACPA dumps in Excel files
+Read in city records from CVS file created from http://www.acpafl.org/
+list file in code/acpafl.coverage.xlsx
+set start , end of record(s) in code/acpafl.coverage.xlsx
+
+```{r}
+#
+rm(list = ls(all = TRUE)) #CLEAR WORKSPACE
+#
+library(XLConnect)
+#install.packages("xlsx")
+require(xlsx)
+require(stringr)
+require(lubridate)
+require(scales)
+require(ggplot2)
+require(dplyr)
+```
+```{r read-in-clean-files}
+# set constants
+TotalBRecords = 0
+BeforeCleaningnRecords = 0
+AfterCleaningnRecords = 0
+DateToday ="28033015"
+# READ IN FILE
+# SET WD
+setwd("~/Dropbox/Public/Real.Estate/code")
+CitySFRange = read.xlsx("alachua.acpafl.coverage.xlsx",sheetIndex=1,stringsAsFactors = F)
+CitySFRange = CitySFRange[complete.cases(CitySFRange),]
+CitySFRange$numberRecords/(CitySFRange$AcreMax-CitySFRange$AcreMin)
+ggplot(CitySFRange,aes(x=AcreMin,y=log(numberRecords/(AcreMax-AcreMin)))) + geom_line()
+Start =1
+End = nrow(CitySFRange)
+#End = 1
+#
+seqi = as.numeric(seq(Start,End))
+for(ii in seqi){
+  if(CitySFRange$File[ii] != "NONE"){
+    setwd("~/Documents/Real.Estate/input/neighborhood/")
+    CityPart = read.csv(CitySFRange$File[ii],stringsAsFactors = F)
+    CityPart$Addr3 = NULL
+    CityPart$ORBook = NULL
+    CityPart$ORPage = NULL
+    cat("File: ",CitySFRange$File[ii],"\n")
+    BeforeCleaningnRecords = nrow(CityPart)    
+    # clean data rules
+    # get rid of non-nemeric values that should be numeric
+    CityPart$Section = as.numeric(CityPart$Section)
+    CityPart$Section[is.na(CityPart$Section)] = 0
+
+    CityPart$Township = as.numeric(CityPart$Township)
+    CityPart$Township[is.na(CityPart$Township)] = 0
+
+    CityPart$Range = as.numeric(CityPart$Range)
+    CityPart$Range[is.na(CityPart$Range)] = 0
+
+    CityPart$SqFt = as.numeric(CityPart$SqFt)
+    CityPart$SqFt[is.na(CityPart$SqFt)] = 0
+
+    CityPart$HtdSqFt = as.numeric(CityPart$HtdSqFt)
+    CityPart$HtdSqFt[is.na(CityPart$HtdSqFt)] = 0
+
+    CityPart$Acres = as.numeric(CityPart$Acres)
+    CityPart$Acres[is.na(CityPart$Acres)] = 0
+
+    CityPart$AgLandVal = as.numeric(CityPart$AgLandVal)
+    CityPart$AgLandVal[is.na(CityPart$AgLandVal)] = 0
+
+    CityPart$MrktLandVal = as.numeric(CityPart$MrktLandVal)
+    CityPart$MrktLandVal[is.na(CityPart$MrktLandVal)] = 0
+
+    CityPart$BldgVal = as.numeric(CityPart$BldgVal)
+    CityPart$BldgVal[is.na(CityPart$BldgVal)] = 0
+
+    CityPart$MiscVal = as.numeric(CityPart$MiscVal)
+    CityPart$MiscVal[is.na(CityPart$MiscVal)] = 0
+
+    CityPart$SOHDeferAmt = as.numeric(CityPart$SOHDeferAmt)
+    CityPart$SOHDeferAmt[is.na(CityPart$SOHDeferAmt)] = 0
+
+    CityPart$ExemptAmt = as.numeric(CityPart$ExemptAmt)
+    CityPart$ExemptAmt[is.na(CityPart$ExemptAmt)] = 0
+
+    CityPart$TaxAmt = as.numeric(CityPart$TaxAmt)
+    CityPart$TaxAmt[is.na(CityPart$TaxAmt)] = 0
+
+    CityPart$SalePrice = as.numeric(CityPart$SalePrice)
+    CityPart$SalePrice[is.na(CityPart$SalePrice)] = 0
+#  SET DEFAULT VALUES IF  NA
+    CityPart$VacImp[is.na(CityPart$VacImp)] = "VACANT"
+    CityPart$QualUnqual[is.na(CityPart$QualUnqual)] = "UNQUALIFIED"
+    CityPart$SaleInstrument[is.na(CityPart$SaleInstrument)] = "Warranty Deed"
+# clean NAs
+    CityPart = CityPart[complete.cases(CityPart),]
+    cat("Number of Records before NA cleaning:",BeforeCleaningnRecords,"Number of Records after NA cleaning:",nrow(CityPart),": ",nrow(CityPart)/BeforeCleaningnRecords,"\n")
+    # clean out spaces at end of sales date
+    CityPart$SaleDate = str_trim(CityPart$SaleDate,side = "both")
+    nbaddate=nrow(subset(CityPart,(str_length(CityPart$SaleDate) > 10)))
+    cat("badly formatted salesdate gt 10 char,count: ",nbaddate,"\n")
+    bd = nrow(CityPart)
+    CityPart = CityPart[!(str_length(CityPart$State) > 4),] 
+    CityPart = subset(CityPart,!(str_length(CityPart$SaleDate) > 10))
+    # set blank sales date to a very early date, essential never been sold
+    CityPart$SaleDate[CityPart$SaleDate == ""] = "1900-01-01"
+    CityPart = subset(CityPart,
+                   str_detect(CityPart$SaleDate,
+                              "[1-2][0,9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]"))
+    cat("before checking date: ",bd,"after checking date: ",nrow(CityPart),"\n")
+    #eliminate bad lastname or address rules
+    nbefore=nrow(CityPart)
+    #eliminate if blank lastname and address rows
+    CityPart = subset(CityPart,!(CityPart$LastName == "" & CityPart$LocAddr == "" & CityPart$Addr1 == ""))
+    # if address set blanK lastname to NLN
+    CityPart$LastName[(CityPart$LastName == "" & (CityPart$LocAddr != "" | CityPart$Addr1 != ""))] = "NLN"
+     # IF ADDRESS ARE BLANK, ELIMINATE
+    CityPart = subset(CityPart,!(CityPart$LocAddr == "" & CityPart$Addr1 == ""))
+    nafter=nrow(CityPart)
+    cat("before/after from eliminate blank lastname and address rules",nafter/nbefore,"\n")
+
+
+    CityPart$Addr1 = str_replace(CityPart$Addr1," LN"," LANE")
+    CityPart$LocAddr = str_replace(CityPart$LocAddr," LN"," LANE")
+    #
+    CityPart$Addr1 = str_replace(CityPart$Addr1," AV"," AVE")
+    CityPart$LocAddr = str_replace(CityPart$LocAddr," AV"," AVE")
+    CityPart$Addr1 = str_replace(CityPart$Addr1," AVEE"," AVE")
+    CityPart$LocAddr = str_replace(CityPart$LocAddr," AVEE"," AVE")
+    #
+    CityPart$Addr1 = str_replace(CityPart$Addr1," 48TH DR"," 48TH")
+    CityPart$LocAddr = str_replace(CityPart$LocAddr," 48TH DR"," 48TH")
+    # end of cleaning sata
+    AfterCleaningnRecords = nrow(CityPart)
+    TotalBRecords = TotalBRecords + BeforeCleaningnRecords
+    # set total value of prop
+    CityPart$Value = CityPart$AgLandVal
+    CityPart$Value = CityPart$AgLandVal + as.numeric(CityPart$MrktLandVal) + CityPart$BldgVal + CityPart$MiscVal
+    CityPart$Value = CityPart$Value - CityPart$SOHDeferAmt - CityPart$ExemptAmt
+      # sort descending by value
+    CityPart = CityPart[order(-CityPart$Value),] 
+    # match - UNIT 0-9999
+    paddr = str_replace(CityPart$LocAddr," - UNIT [0-9]{1,}| - [0-9]{1,}","")
+    paddr = str_replace(paddr,"PL - A|PL - B|PL - C","PL")
+    paddr = str_replace(paddr,"LANE - A|LANE - B|LANE - C","LANE")
+    paddr = str_replace(paddr,"TER - [A-Z]{1,}","TER")
+    paddr = str_replace(paddr,"WAY - A|WAY - B|WAY - C","WAY")
+    
+    # match "  UNIT 2-101 or #4-305 or APT 5-301 or BLDG 1 # 305 OR #1105
+    maddr = str_replace(CityPart$Addr1," UNIT [0-9]-[0-9]{1,}| UNIT [0-9]{1,}| #[0-9]-[0-9]{1,}| #[0-9]{1,}| # [0-9]{1,}| APT [0-9]{1,}| APT [0-9]-[0-9]{1,}| BLDG [0-9] # [0-9]{1,}","")
+    maddr = str_replace(maddr," 25TH PL"," 25TH LANE")
+    maddr = str_replace(maddr,"49TH ST-[0-9]{1,}","49TH ST")
+    maddr = str_replace(maddr,"48TH ST-[0-9]{1,}","48TH ST")
+    maddr = str_replace(maddr,"43RD AVE-[0-9]{1,}","43RD AVE")
+    maddr = str_replace(maddr," # A","")
+    maddr = str_replace(maddr,"TER STE [A-Z]{1,}","TER")
+    #  set back address as new variables in dataframme
+    CityPart$paddr = paddr
+    CityPart$maddr = maddr
+    #
+    cat("Number of Records before cleaning:",BeforeCleaningnRecords,"Number of Records after cleaning:",AfterCleaningnRecords,"\n")
+    # set up blank holders
+    if(ii == seqi[1]){
+      CountyAccessorRecords = subset(CityPart,CityPart$LastName %in% "0xxxxxyyyzzz")
+    }
+    # add to total
+    CountyAccessorRecords = rbind(CountyAccessorRecords,CityPart)
+  } # END IF
+} #END FOR LOOP
+#
+# convert to uppercase
+#CountyAccessorRecords = data.frame(lapply(CountyAccessorRecords, function(v) {
+#  if (is.character(v)) return(toupper(v))
+#  else return(v) }))
+```{r add-SaleDiff}
+ucdf = function (df) { data.frame(lapply(df, function(v) {
+  if (is.character(v)) 
+    return(toupper(v))
+  else return(v) })
+  ,stringsAsFactors=FALSE)
+  }
+CountyAccessorRecords = ucdf(CountyAccessorRecords)
+
+# in months
+CountyAccessorRecords$SaleDateDiff =  sapply(CountyAccessorRecords$SaleDate, function(x) 
+  ((year(now())-year(x))*12 + month(now())-month(x))
+  ,USE.NAMES=FALSE)
+cati = c(0,12,24,36,48,60,72,84,96,108,120,132,144,156,168,180,192,216,240,300,100000)
+labs = seq(1,length(cati) -1)
+t=table(cut(CountyAccessorRecords$SaleDateDiff,cati))
+prop.table(t)
+plot(t)
+cat("Total records: ",length(cut(CountyAccessorRecords$SaleDateDiff,cati)),"\n")
+
+CountyAccessorRecords$SaleDateCategoryLabels = cut(CountyAccessorRecords$SaleDateDiff,cati)
+CountyAccessorRecords$SaleDateCategory = cut(CountyAccessorRecords$SaleDateDiff,cati, labels = labs)
+#    
+cat("Total Number of Records BEFORE:",TotalBRecords)
+TotalnRecords = nrow(CountyAccessorRecords)
+cat("Total Number of Records CLEANED:",TotalnRecords)
+TotalnRecords = nrow(unique(CountyAccessorRecords))
+CountyAccessorRecords = unique(CountyAccessorRecords)
+cat("Total Number of Unique Records CLEANED:",TotalnRecords)
+cat("SURVIVAL %:",TotalnRecords/TotalBRecords)
+#tail(table(CountyAccessorRecords$City))
+```
+
+```{r create-write-DB}
+# sort descending by neighborhood, tax-ip,
+CountyAccessorRecords = CountyAccessorRecords[order(CountyAccessorRecords$Neighborhood,CountyAccessorRecords$PUse,CountyAccessorRecords$SalePrice),] 
+# DB are usually binary and internal use
+setwd("~/Documents/Real.Estate/input/DB/")
+fn = paste0("DB.Alachua.APCA.",DateToday,".rds")
+cat("Wrting out file: ",fn,"\n")
+saveRDS(CountyAccessorRecords,file = fn)
+# test it
+records=readRDS(fn)
+table(CountyAccessorRecords$Neighborhood)
+#df = subset(CountyAccessorRecords,str_detect(CountyAccessorRecords$paddr,"13155"))
+```
+

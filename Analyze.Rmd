@@ -1,0 +1,27 @@
+---
+title: "PeterProject"
+author: "Bruce Cottman"
+date: "October 17, 2015"
+output: html_document
+---
+
+# Time to start looking at the features
+# Here is a visualization of the non-character variables
+```{r readin}
+library(readr)
+#install.packages("corrplot")
+library(corrplot)
+
+setwd("")
+train <- read_csv("151013 Test Case.csv")
+
+#train <- train[,-c(1)]
+
+# Write to the log:
+cat(sprintf("Training set has %d rows and %d columns\n", nrow(train), ncol(train)))
+cat(sprintf("Test set has %d rows and %d columns\n", nrow(test), ncol(test)))
+
+M <- cor(train[sapply(train, function(x) !is.character(x))])
+#corrplot(M, method = "ellipse",order = "hclust")
+##Updated
+corrplot(M, method = "number",order = "hclust",type='lower', diag=F, addCoefasPercent=T) 
