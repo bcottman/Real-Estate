@@ -11,3 +11,10 @@ where the primary variables turned out to be exponential distribution
 of time-to-last-sale and other dependent variables. Increased response 
 rate from 0.2% to 1.2% (based on approximately 5,000 mailings distributed 
 over control (1,000) and targeted groups (4,000).
+
+The primary code files for browsung this work are:
+  CreateLatinoMailingList.Rmd
+  CreateOIRAlachuaCountyMailingList.Rmd
+  PriceFromCMA.Rmd
+  ShowHNHHDSales.Rmd
+  scrapeRealtorSite.R
